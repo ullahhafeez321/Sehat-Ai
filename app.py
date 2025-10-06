@@ -3,6 +3,7 @@ from PIL import Image
 import torch
 from torchvision import transforms
 import os
+from transformers import ViTForImageClassification
 
 # --------------------
 # Flask Setup
@@ -15,14 +16,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Device
 # --------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 # --------------------
-# Load Chest X-ray Model
+# Model Definition (same as training)
 # --------------------
-from transformers import ViTForImageClassification
-
 class ViTForChestXray(torch.nn.Module):
-    def __init__(self, num_labels=14):  # default NIH labels
+    def __init__(self, num_labels=15):  # use correct number of labels from your checkpoint
         super().__init__()
         self.vit = ViTForImageClassification.from_pretrained(
             'google/vit-base-patch16-224',
@@ -38,12 +38,17 @@ class ViTForChestXray(torch.nn.Module):
     def forward(self, pixel_values):
         return self.vit(pixel_values=pixel_values).logits
 
-# Replace with actual number of NIH labels
-NIH_LABELS = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", 
-              "Mass", "Nodule", "Pneumonia", "Pneumothorax", 
-              "Consolidation", "Edema", "Emphysema", "Fibrosis", 
-              "Pleural_Thickening", "Hernia"]
+# --------------------
+# Labels (match your training)
+# --------------------
+NIH_LABELS = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration",
+              "Mass", "Nodule", "Pneumonia", "Pneumothorax",
+              "Consolidation", "Edema", "Emphysema", "Fibrosis",
+              "Pleural_Thickening", "Hernia", "No Finding"]
 
+# --------------------
+# Load model
+# --------------------
 model = ViTForChestXray(num_labels=len(NIH_LABELS))
 model.load_state_dict(torch.load("models/vit_chest_xray_epoch_3_auc_0.820.pt", map_location=device))
 model.to(device)
@@ -71,12 +76,12 @@ def chest_xray():
     uploaded_image_path = None
 
     if request.method == "POST":
-        file = request.files["xray_image"]
+        file = request.files.get("xray_image")
         if file:
             uploaded_image_path = os.path.join(UPLOAD_FOLDER, file.filename)
             file.save(uploaded_image_path)
 
-            # Load and preprocess image
+            # Load and preprocess
             img = Image.open(uploaded_image_path).convert("RGB")
             input_tensor = transform(img).unsqueeze(0).to(device)
 
@@ -89,7 +94,7 @@ def chest_xray():
             if not labels:
                 labels = ["No Finding"]
 
-            # Confidence for labels > 0.3
+            # Confidence scores
             confs = {NIH_LABELS[i]: float(outputs[i]) for i in range(len(NIH_LABELS)) if outputs[i] > 0.3}
 
             prediction_text = ", ".join(labels)
