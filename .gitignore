@@ -1,0 +1,14 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore virtual environments
+venv/
+env/
+
+# Ignore uploaded images
+static/uploads/
+
+# Ignore large model files
+models/*.pt
+models/*.safetensors
